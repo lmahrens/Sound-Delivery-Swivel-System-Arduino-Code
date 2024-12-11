@@ -1,0 +1,95 @@
+#include <AccelStepper.h>
+
+// Define the stepper motor connections
+#define dirPin 2     // Direction pin
+#define stepPin 3    // Step pin
+#define limitSwitchPin 4  // Limit switch pin (adjust according to your wiring)
+
+AccelStepper stepper(AccelStepper::DRIVER, stepPin, dirPin);
+
+// Constants
+const int stepsPerRevolution = 1800;  // Number of steps per full revolution for your motor (usually 200 for a 1.8° motor)
+
+// New variables to track the motor's "zero" position
+long newZeroPosition = 0;  // The new "0" position in steps (after moving 180 degrees backwards)
+bool limitSwitchTriggered = false; // Flag to indicate if the limit switch was triggered
+
+void setup() {
+  // Initialize the motor
+  stepper.setMaxSpeed(1000);  // Set maximum speed (steps per second)
+  stepper.setAcceleration(500);  // Set acceleration (steps per second^2)
+
+  // Initialize the limit switch pin
+  pinMode(limitSwitchPin, INPUT_PULLUP);  // Assuming the limit switch is wired to ground when triggered
+
+  // Optional: Start serial communication for debugging
+  Serial.begin(9600);  // Start serial communication at 9600 baud rate
+
+  // Calibration step: Move motor towards the limit switch until triggered
+  Serial.println("Starting calibration...");
+
+  // Move in one direction (e.g., towards the limit switch) until it's triggered
+  while (digitalRead(limitSwitchPin) == HIGH) {  // Limit switch not pressed (assuming HIGH means not triggered)
+    stepper.setSpeed(100);  // Move the motor at a constant speed
+    stepper.runSpeed();  // Continuously run the motor until the limit switch is triggered
+  }
+
+  // Stop the motor once the limit switch is triggered
+  stepper.setSpeed(0);
+  stepper.runSpeed();
+
+  Serial.println("Limit switch triggered. Calibration complete.");
+
+  // setting current position to 0 to make 180 accurate
+  stepper.setCurrentPosition(0);
+  
+  // Once the limit switch is triggered, move the motor 180 degrees backwards
+  Serial.println("Moving motor 180 degrees backwards...");
+  long stepsBack = map(180, 0, 360, 0, stepsPerRevolution);  // Convert 180 degrees to steps
+  stepper.moveTo(-stepsBack);  // Move backwards 180 degrees
+  
+  while (stepper.distanceToGo() != 0) {
+    stepper.run();  // Keep running the motor until it reaches the target position
+  }
+
+  // Set the new "0" position
+  stepper.setCurrentPosition(0);
+    
+  newZeroPosition = stepper.currentPosition();  // Set the current position as the new 0 point
+  Serial.print("New Zero Point: ");
+  Serial.println(newZeroPosition);
+
+  limitSwitchTriggered = true;  // Mark that the limit switch was triggered and handled
+}
+
+void loop() {
+  if (limitSwitchTriggered) {
+    // If serial data is available, read the angle
+    if (Serial.available() > 0) {
+      // Read the incoming angle (expecting a string)
+      String angleString = Serial.readStringUntil('\n');
+      
+      // Convert the received angle to an integer
+      int angle = angleString.toInt();
+      
+      // Adjust the target angle based on the new zero position
+      long targetSteps = map(angle, 0, 360, 0, stepsPerRevolution);
+
+      // Convert to steps relative to the new zero point
+      targetSteps -= newZeroPosition;  // Subtract the new zero point to calculate relative position
+
+      // Print the current angle and continue moving the motor
+      Serial.print("Moving to ");
+      Serial.print(angle);
+      Serial.println(" degrees...");
+      
+      // Move the motor to the target position
+      stepper.moveTo(targetSteps);  // Move to target position (in steps)
+
+      // Run the motor to the target position
+      while (stepper.distanceToGo() != 0) {
+        stepper.run();  // Keep the motor running until it reaches the target position
+      }
+    }
+  }
+}
