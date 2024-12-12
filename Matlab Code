@@ -1,0 +1,21 @@
+% Initialize the serial port communication
+serialPort = 'COM3';  % Modify with the correct port (e.g., COM3)
+baudRate = 9600;
+s = serial(serialPort, 'BaudRate', baudRate, 'Terminator', 'LF', 'Timeout', 10);
+fopen(s);
+
+% Send angle values to Arduino
+angles = [0, 15, 30, -30];  % Array of angles to send
+for i = 1:length(angles)
+    % Send the current angle
+    fprintf(s, '%d', angles(i));
+    disp(['Sent angle: ', num2str(angles(i)), ' degrees']);
+    
+    % Pause for a moment to give Arduino time to move
+    pause(2);  % Adjust this as necessary based on motor speed and response time
+end
+
+% Close the serial communication
+fclose(s);
+delete(s);
+clear s;
